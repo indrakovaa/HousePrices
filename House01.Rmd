@@ -1,0 +1,119 @@
+---
+title: "Kaggle houses"
+author: "Adela Indrakova"
+date: "10 10 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("corrplot")
+library("tidyverse")
+library("RColorBrewer")
+library("corrplot")
+
+```
+
+## Houses
+Import dataset from kaggle.com, do a basic check of the Dataset. There are 1460 observations for 81 variables, the last variable is Sale Price.
+```{r houses}
+houses <- read.csv("train.csv")
+head(houses)
+dim(houses)
+colnames(houses)
+```
+
+## Basic EDA
+Check for missing values.
+```{r missing values}
+colSums(is.na(houses))
+```
+
+The distribution of the varibale Sales Price. 
+```{r Price hist}
+houses %>% 
+  ggplot(aes(x=SalePrice))+
+  geom_histogram(bins=50, col="white", fill="orange")+
+  scale_x_continuous(labels = scales::comma)+
+  labs(title="Histogram of the Sale price")
+```
+
+The Sales price does not have a Gaussian distribution, it looks more like a log distribuition. After the log transformation of the Sale Price value, the distribution looks more Gaussian.
+```{r Price hist log}
+houses %>% 
+  ggplot(aes(x=log(SalePrice)))+
+  geom_histogram(bins=50, col="white")+
+  labs(title="Histogram of the Sale price after the log normalization")
+```
+
+I focused on garages associated with the Sale Prices of the house. 
+
+```{r EDA}
+houses %>% 
+  ggplot()+
+  geom_histogram(aes(x=GarageQual), stat = "count") 
+```
+
+Most of the Houses in the list have Garage in quality TA - typical/average, some of the houses did not have any garage (NA). 
+```{r Qual mean}
+houses %>% 
+  mutate(GarageQual=coalesce(GarageQual,"none")) %>%
+  group_by(GarageQual) %>% 
+  summarise(MeanSalePrice=mean(SalePrice)) %>% 
+  arrange(desc(MeanSalePrice))
+```
+
+The mean sale price is highest for the houses with Garages in excellent quality.
+```{r Garagequal}
+houses %>% 
+  mutate(GarageQual=coalesce(GarageQual,"none")) %>% 
+  mutate(GarageQual = factor(GarageQual, levels = c("Ex", "Gd", "TA", "Fa", "Po", "none"))) %>% 
+  ggplot(aes(x=GarageArea, y=SalePrice))+
+  geom_point(aes(color=factor(GarageCars), shape=GarageQual))+
+  scale_color_brewer(palette="Set1")
+
+
+houses %>% 
+  ggplot(aes(x=GarageCars, y=SalePrice))+
+  geom_boxplot(aes(group=GarageCars))
+
+sum(houses$GarageCars==4)
+```
+The boxplot shows that the houses are more expensive, when the garage have room for more (up to 3) cars. The prices of the houses are lower, when the garage have space for 4 cars. However, such result can be misleading, since there are only five houses with the garage for four cars.
+
+Density plot of the year the garage was built.
+```{r density}
+houses %>% 
+  filter(!is.na(GarageYrBlt)) %>% 
+  ggplot(aes(x=GarageYrBlt)) + 
+  geom_line(stat = "density")
+min(houses$GarageYrBlt, na.rm = T)
+
+```
+
+The garages were built since 1900 and based on the density plot more garages were built since then. There were fewer garages built around 1990 and 2009-2010.
+
+The scatter plots
+```{r type}
+houses %>% 
+  filter(!is.na(GarageType)) %>% 
+  ggplot(aes(x = GarageYrBlt, y = SalePrice)) + 
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, hjust =1))+
+  facet_grid(. ~ GarageType)
+```
+
+The most frequently built garages are Attached to home and Detached from home. Recently, built in garages are becoming more popular, also the price of the house with such garage is rising, similarly to the prices of houses with recently built attached garages, whereas the price for the house with detached garage is steady.
+
+##Correlations
+Find correlation between numeric variables.
+```{r Correlations}
+houses[,-1] %>% 
+  select_if(is.numeric)%>% 
+  na.omit() %>% 
+  cor(use = "pairwise.complete.obs") -> correlations
+corrplot(correlations, method="square", tl.cex=0.7)
+sort(abs(correlations[,"SalePrice"])) 
+  
+```
+The correlation matrix shows that there are several variables strongly corralated with the Sale Price. The three more strongly correlated are GarageCars,GrLivArea, and OverallQual.
